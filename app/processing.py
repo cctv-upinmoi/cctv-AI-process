@@ -6,10 +6,22 @@ from shapely.geometry import Point, Polygon
 from ultralytics import YOLO
 
 class AIProcessor(threading.Thread):
-    def __init__(self, buffer, zone_points, model_path="yolov8n.pt", skip_frame=3):
+    def __init__(self, camera_id, buffer, zones_data, model_path="yolov8n.pt", skip_frame=3):
         super().__init__()
+        self.camera_id = camera_id
         self.buffer = buffer
-        self.zone = Polygon(zone_points)
+        
+        self.zones = []
+        if zones_data:
+            for z in zones_data:
+                # zones_data is a list of Zone objects
+                if getattr(z, "enabled", True) and getattr(z, "points", []):
+                    self.zones.append(Polygon(z.points))
+        
+        if not self.zones:
+            # Fallback if no valid zones are provided
+            self.zones.append(Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]))
+
         self.model = YOLO(model_path)
         self.skip_frame = skip_frame
         self.frame_count = 0
@@ -45,24 +57,30 @@ class AIProcessor(threading.Thread):
             cy = (y1 + y2) // 2
 
             point = Point(cx, cy)
+            
+            in_any_zone = False
+            for zone in self.zones:
+                if zone.contains(point):
+                    in_any_zone = True
+                    break
 
-            in_zone = self.zone.contains(point)
-
-            if in_zone:
-                person_id = f"{cx}-{cy}"
+            if in_any_zone:
+                person_id = f"{self.camera_id}-{cx}-{cy}"
 
                 if person_id not in self.alerted:
-                    print(f"🚨 ALERT: Person detected in zone at ({cx}, {cy})")
+                    print(f"🚨 ALERT [{self.camera_id}]: Person detected in zone at ({cx}, {cy})")
                     self.alerted.add(person_id)
 
             # draw
-            color = (0, 0, 255) if in_zone else (0, 255, 0)
+            color = (0, 0, 255) if in_any_zone else (0, 255, 0)
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
-        pts = np.array(self.zone.exterior.coords, np.int32)
-        cv2.polylines(frame, [pts], True, (255, 0, 0), 2)
+        for zone in self.zones:
+            pts = np.array(zone.exterior.coords, np.int32)
+            cv2.polylines(frame, [pts], True, (255, 0, 0), 2)
 
-        cv2.imshow("AI CCTV", frame)
+        window_name = f"AI CCTV - {self.camera_id}"
+        cv2.imshow(window_name, frame)
 
         if cv2.waitKey(1) & 0xFF == 27:
             self.stop()

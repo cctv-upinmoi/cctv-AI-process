@@ -1,37 +1,72 @@
+import time
 from app.camera_streams import CameraStream
 from app.frame_buffer import FrameBuffer
 from app.processing import AIProcessor
+from app.api_client import fetch_cameras
 
 
 class App:
-    def __init__(self, rtsp_url):
+    def __init__(self, camera):
+        self.camera_id = camera.indexId
         self.buffer = FrameBuffer(maxsize=1)
 
-        zone_points = [(100, 100), (500, 100), (500, 300), (100, 300)]
-
-        self.camera = CameraStream(rtsp_url, self.buffer)
-        self.ai = AIProcessor(self.buffer, zone_points)
+        self.camera_stream = CameraStream(camera.rtsp_stream_url, self.buffer)
+        self.ai = AIProcessor(self.camera_id, self.buffer, camera.zones)
 
     def start(self):
-        self.camera.start()
+        self.camera_stream.start()
         self.ai.start()
 
     def stop(self):
-        self.camera.stop()
+        self.camera_stream.stop()
         self.ai.stop()
 
-        self.camera.join()
+    def join(self):
+        self.camera_stream.join()
         self.ai.join()
 
 
 if __name__ == "__main__":
-    # call restapi to core load cameras information
-    RTSP_URL = "rtsp://localhost:8554/camera1"
+    print("Fetching cameras from backend API...")
+    cameras = fetch_cameras()
+    
+    if not cameras:
+        print("No camera data found. Exiting.")
+        exit(1)
 
-    app = App(RTSP_URL)
-
-    try:
-        app.start()
-    except KeyboardInterrupt:
-        print("Stopping...")
-        app.stop()
+    # apps = []
+    #
+    # for cam in cameras:
+    #     cam_id = cam.indexId
+    #     status = cam.status or "NOK"
+    #
+    #     if status != "OK":
+    #         print(f"Skipping camera {cam_id} because status is {status}")
+    #         continue
+    #
+    #     if cam.rtsp_stream_url:
+    #         print(f"Initializing stream for camera {cam_id}: {cam.rtsp_stream_url}")
+    #         # app_instance = App(cam)
+    #         apps.append(app_instance)
+    #     else:
+    #         print(f"Skipping camera {cam_id} because RTSP Url is empty.")
+    #
+    # if not apps:
+    #     print("No active cameras to process. Exiting.")
+    #     exit(1)
+    #
+    # print("Starting all active cameras...")
+    # try:
+    #     for app_instance in apps:
+    #         app_instance.start()
+    #
+    #     while True:
+    #         time.sleep(1)
+            
+    # except KeyboardInterrupt:
+    #     print("\nStopping...")
+    #     for app_instance in apps:
+    #         app_instance.stop()
+    #     for app_instance in apps:
+    #         app_instance.join()
+    #     print("All cameras stopped.")
