@@ -1,7 +1,7 @@
 import time
 from app.camera_streams import CameraStream
 from app.frame_buffer import FrameBuffer
-from app.processing import AIProcessor
+# from app.processing import AIProcessor
 from app.api_client import fetch_cameras
 
 
@@ -11,19 +11,19 @@ class App:
         self.buffer = FrameBuffer(maxsize=1)
 
         self.camera_stream = CameraStream(camera.rtsp_stream_url, self.buffer)
-        self.ai = AIProcessor(self.camera_id, self.buffer, camera.zones)
+        # self.ai = AIProcessor(self.camera_id, self.buffer, camera.zones)
 
     def start(self):
         self.camera_stream.start()
-        self.ai.start()
+        # self.ai.start()
 
     def stop(self):
         self.camera_stream.stop()
-        self.ai.stop()
+        # self.ai.stop()
 
     def join(self):
         self.camera_stream.join()
-        self.ai.join()
+        # self.ai.join()
 
 
 if __name__ == "__main__":
@@ -33,6 +33,11 @@ if __name__ == "__main__":
     if not cameras:
         print("No camera data found. Exiting.")
         exit(1)
+
+    for cam in cameras:
+        print(f"[{cam.id}] {cam.name} - {cam.rtsp_stream_url}")
+        for zone in cam.zones:
+            print(f"  Zone: {zone.name} ({zone.type}) - enabled: {zone.enabled}")
 
     # apps = []
     #

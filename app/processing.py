@@ -3,7 +3,7 @@ import time
 import cv2
 import numpy as np
 from shapely.geometry import Point, Polygon
-from ultralytics import YOLO
+# from ultralytics import YOLO
 
 class AIProcessor(threading.Thread):
     def __init__(self, camera_id, buffer, zones_data, model_path="yolov8n.pt", skip_frame=3):

@@ -18,3 +18,7 @@ class Camera:
         self.zones = [Zone(z) for z in data.get("zones", [])]
         self.created_at = data.get("createdAt")
         self.updated_at = data.get("updatedAt")
+
+    def __repr__(self):
+        return f"Camera(id={self.id}, name={self.name}, status={self.status})"
+
