@@ -24,7 +24,7 @@ def fetch_cameras() -> list[Camera]:
             timeout=10,
         )
         response.raise_for_status()
-        raw_cameras = response.json().get("data", [])
+        raw_cameras = response.json().get("data") or []
         return [Camera(c) for c in raw_cameras]
     except Exception as e:
         print(f"[api_client] error fetching cameras: {e}")

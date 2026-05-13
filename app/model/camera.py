@@ -15,7 +15,7 @@ class Camera:
         self.longitude = data.get("longitude")
         self.latitude = data.get("latitude")
         self.location_detail = data.get("locationDetail")
-        self.zones = [Zone(z) for z in data.get("zones", [])]
+        self.zones = [Zone(z) for z in (data.get("zones") or [])]
         self.created_at = data.get("createdAt")
         self.updated_at = data.get("updatedAt")
 

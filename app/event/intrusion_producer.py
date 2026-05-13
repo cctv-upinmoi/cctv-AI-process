@@ -30,17 +30,21 @@ class IntrusionProducer:
         zone_name: str,
         confidence: float,
         frame: np.ndarray,
+        alert_type: str = "INTRUSION",
+        person_count: int = 1,
     ) -> None:
         _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         image_b64 = base64.b64encode(buf.tobytes()).decode("ascii")
 
         payload = json.dumps({
-            "timestamp":   timestamp,
-            "camera_id":   camera_id,
-            "camera_name": camera_name,
-            "zone_name":   zone_name,
-            "confidence":  round(confidence, 4),
-            "image":       image_b64,
+            "timestamp":    timestamp,
+            "camera_id":    camera_id,
+            "camera_name":  camera_name,
+            "zone_name":    zone_name,
+            "confidence":   round(confidence, 4),
+            "alert_type":   alert_type,
+            "person_count": person_count,
+            "image":        image_b64,
         })
 
         try:
