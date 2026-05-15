@@ -12,7 +12,8 @@ MIN_CONFIDENCE = 0.5
 
 ZONE_CLEAR_TIMEOUT = 8.0   # seconds without detection → intrusion zone re-arms
 PROX_CLEAR_TIMEOUT = 4.0   # seconds without detection → proximity zone re-arms
-PROXIMITY_PIXELS   = 80    # pixel distance from zone boundary → proximity warning
+PROXIMITY_PIXELS   = 180   # pixel distance from zone boundary → proximity warning
+PROX_MIN_FRAMES    = 4     # consecutive proximity frames required before alert fires
 
 COLORS = {
     "safe":      (0, 255,   0),   # green
@@ -55,6 +56,7 @@ class AIProcessor:
         # Entry-based state for PROXIMITY alerts (independent from intrusion)
         self._prox_last_seen: dict[str, float] = {}
         self._prox_alerted:   dict[str, bool]  = {}
+        self._prox_frames:    dict[str, int]   = {}  # consecutive proximity frames per zone
 
         # Running person counts per zone (smoothed across frames)
         self._intrusion_count: dict[str, int] = defaultdict(int)
@@ -126,7 +128,9 @@ class AIProcessor:
                 frame_intrusion_count[zone_name] += 1
                 self._zone_last_seen[zone_name] = now
                 self._prox_last_seen[zone_name] = now
-                self._prox_alerted[zone_name]   = True
+                # Person entered the zone — suppress any pending proximity alert
+                self._prox_alerted[zone_name] = True
+                self._prox_frames[zone_name]  = 0
 
                 if not self._zone_alerted.get(zone_name, False):
                     self._zone_alerted[zone_name] = True
@@ -140,8 +144,10 @@ class AIProcessor:
                 prox_zones.add(zone_name)
                 frame_prox_count[zone_name] += 1
                 self._prox_last_seen[zone_name] = now
+                self._prox_frames[zone_name] = self._prox_frames.get(zone_name, 0) + 1
 
-                if not self._prox_alerted.get(zone_name, False):
+                if (not self._prox_alerted.get(zone_name, False)
+                        and self._prox_frames[zone_name] >= PROX_MIN_FRAMES):
                     self._prox_alerted[zone_name] = True
                     self._send_alert(
                         zone_name, conf, (cx, cy), frame,
@@ -193,6 +199,7 @@ class AIProcessor:
             if name not in prox_zones and name not in intrusion_zones:
                 if now - self._prox_last_seen.get(name, 0) > PROX_CLEAR_TIMEOUT:
                     self._prox_alerted[name] = False
+                    self._prox_frames[name]  = 0  # reset frame counter when zone clears
 
     def _draw_zones(self, frame: np.ndarray, zone_polys) -> np.ndarray:
         for zone, pts in zone_polys:
