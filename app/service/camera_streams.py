@@ -3,16 +3,18 @@ import time
 
 import cv2
 
-from app.config.config import GO2RTC_RTSP_URL
+from config.config import GO2RTC_RTSP_URL
 
 
 class CameraStream(threading.Thread):
-    def __init__(self, camera_name: str, buffer):
+    def __init__(self, camera_name: str, buffer, rolling_buffer=None, clip_recorder=None):
         super().__init__()
         self.camera_name = camera_name
         self.buffer = buffer
         self.stop_event = threading.Event()
         self._url = f"{GO2RTC_RTSP_URL}/{camera_name}"
+        self._rolling = rolling_buffer
+        self._recorder = clip_recorder
 
     def run(self):
         while not self.stop_event.is_set():

@@ -4,4 +4,3 @@ numpy
 shapely
 requests
 kafka-python
-redis

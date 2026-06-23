@@ -1,4 +1,4 @@
-from app.model.zone import Zone
+from model.zone import Zone
 
 
 class Camera:
