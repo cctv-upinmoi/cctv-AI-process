@@ -9,11 +9,12 @@ class FrameBuffer:
         if self.queue.full():
             try:
                 self.queue.get_nowait()
-            except:
+            except queue.Empty:
                 pass
         self.queue.put(frame)
 
     def get(self):
-        if self.queue.empty():
+        try:
+            return self.queue.get_nowait()
+        except queue.Empty:
             return None
-        return self.queue.get()

@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from ultralytics import YOLO
 from event.factory import make_intrusion_producer
 from config.config import (
-    ALERT_ENABLED, ALERT_COOLDOWN_SECS,
+    ALERT_ENABLED,
+    INTRUSION_PERSIST_SECS, INTRUSION_COOLDOWN_SECS,
     PPE_PERSIST_SECS, PPE_COOLDOWN_SECS,
     YOLO_MODEL_PATH,
 )
@@ -87,16 +88,17 @@ class AlertGate:
 
 
 class AIProcessor:
-    def __init__(self, camera_id: str, camera_name: str, camera_manager: CameraConfigManager,
-                 rolling_buffer=None, clip_recorder=None):
+    def __init__(self, camera_id: str, camera_name: str, camera_manager: CameraConfigManager):
         self.camera_id      = camera_id
         self.camera_name    = camera_name
         self.model          = YOLO(YOLO_MODEL_PATH)
         self.camera_manager = camera_manager
         self._producer      = make_intrusion_producer()
         self._motion        = MotionDetector()
-        self._intrusion_gate = AlertGate(persist_secs=0.0, cooldown_secs=ALERT_COOLDOWN_SECS)
-        self._ppe_gate       = AlertGate(persist_secs=PPE_PERSIST_SECS, cooldown_secs=PPE_COOLDOWN_SECS)
+        self._intrusion_gate = AlertGate(persist_secs=INTRUSION_PERSIST_SECS,
+                                         cooldown_secs=INTRUSION_COOLDOWN_SECS)
+        self._ppe_gate       = AlertGate(persist_secs=PPE_PERSIST_SECS,
+                                         cooldown_secs=PPE_COOLDOWN_SECS)
         self._intrusion_count: dict[str, int] = defaultdict(int)
 
         print(f"[AIProcessor] Loaded model: {YOLO_MODEL_PATH}")
@@ -124,14 +126,17 @@ class AIProcessor:
             frame = self._draw_zones(frame, zone_polys)
             return frame
 
+        # Frame sạch để build ảnh alert — tách khỏi display frame có overlay.
+        raw_frame = frame.copy()
+
         # Single inference for zone detection + all PPE classes
         results = self.model.track(frame, persist=True, verbose=False)[0]
         now = time.time()
 
         frame_intrusion_count: dict[str, int] = defaultdict(int)
 
-        # Track PPE violations this frame: cls_id → (max_conf, count)
-        ppe_detected: dict[int, tuple[float, int]] = {}  # cls_id → (max_conf, count)
+        # Gom PPE box theo class để build ảnh alert riêng cho từng loại vi phạm.
+        ppe_boxes_by_cls: dict[int, list[tuple[int, int, int, int, float]]] = defaultdict(list)
 
         boxes = results.boxes
         track_ids = boxes.id.int().cpu().tolist() if boxes.id is not None else [None] * len(boxes)
@@ -164,37 +169,44 @@ class AIProcessor:
 
                 zone_name = matched.name
                 frame_intrusion_count[zone_name] += 1
+                self._intrusion_count[zone_name] = frame_intrusion_count[zone_name]
 
                 gate_key = (zone_name, track_id) if track_id is not None else (zone_name, "untracked")
                 if self._intrusion_gate.should_fire(gate_key, now):
+                    alert_img = self._build_intrusion_image(
+                        raw_frame, (x1, y1, x2, y2), track_id, conf, zone_polys,
+                    )
                     self._send_alert(
-                        zone_name, conf, frame,
+                        zone_name, conf, alert_img,
                         alert_type="INTRUSION",
                         person_count=frame_intrusion_count[zone_name],
                     )
 
             # PPE violation class
             elif cls_id in PPE_ALERT_TYPES:
-                prev_conf, prev_count = ppe_detected.get(cls_id, (0.0, 0))
-                ppe_detected[cls_id] = (max(prev_conf, conf), prev_count + 1)
+                ppe_boxes_by_cls[cls_id].append((x1, y1, x2, y2, conf))
                 label = PPE_CLASS_LABELS[cls_id]
                 cv2.rectangle(frame, (x1, y1), (x2, y2), COLORS["ppe"], 2)
                 cv2.putText(frame, f"{label} {conf:.0%}", (x1, max(y1 - 5, 10)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLORS["ppe"], 1, cv2.LINE_AA)
 
-        # Update zone counters
+        # Update zone counters — đảm bảo zone không có người được reset về 0.
         for zone in active_zones:
             self._intrusion_count[zone.name] = frame_intrusion_count[zone.name]
 
-        # PPE alerts — one per class, independent cooldown
+        # PPE alerts — one per class, independent cooldown.
+        # Mỗi alert có ảnh CHỈ chứa bounding box của loại vi phạm đó.
         for cls_id, alert_type in PPE_ALERT_TYPES.items():
-            if cls_id in ppe_detected:
-                max_conf, count = ppe_detected[cls_id]
+            cls_boxes = ppe_boxes_by_cls.get(cls_id, [])
+            if cls_boxes:
+                max_conf = max(b[4] for b in cls_boxes)
+                count = len(cls_boxes)
                 if self._ppe_gate.should_fire(cls_id, now):
+                    alert_img = self._build_ppe_image(raw_frame, cls_id, cls_boxes)
                     self._send_alert(
                         zone_name="",
                         conf=max_conf,
-                        frame=frame,
+                        frame=alert_img,
                         alert_type=alert_type,
                         person_count=count,
                     )
@@ -233,6 +245,30 @@ class AIProcessor:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLORS["intrusion"], 2, cv2.LINE_AA)
 
         return frame
+
+    def _build_intrusion_image(self, raw_frame: np.ndarray,
+                               person_box: tuple[int, int, int, int],
+                               track_id, conf: float, zone_polys) -> np.ndarray:
+        """Ảnh INTRUSION: zone polygon + bounding box của người vi phạm."""
+        img = raw_frame.copy()
+        img = self._draw_zones(img, zone_polys)
+        x1, y1, x2, y2 = person_box
+        cv2.rectangle(img, (x1, y1), (x2, y2), COLORS["intrusion"], 2)
+        id_label = f"#{track_id} " if track_id is not None else ""
+        cv2.putText(img, f"{id_label}{conf:.0%}", (x1, y1 - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS["intrusion"], 1, cv2.LINE_AA)
+        return img
+
+    def _build_ppe_image(self, raw_frame: np.ndarray, cls_id: int,
+                         cls_boxes: list[tuple[int, int, int, int, float]]) -> np.ndarray:
+        """Ảnh PPE: CHỈ bounding box của loại vi phạm này, không zone, không person box."""
+        img = raw_frame.copy()
+        label = PPE_CLASS_LABELS[cls_id]
+        for x1, y1, x2, y2, conf in cls_boxes:
+            cv2.rectangle(img, (x1, y1), (x2, y2), COLORS["ppe"], 2)
+            cv2.putText(img, f"{label} {conf:.0%}", (x1, max(y1 - 5, 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLORS["ppe"], 1, cv2.LINE_AA)
+        return img
 
     def _send_alert(self, zone_name: str, conf: float, frame: np.ndarray,
                     alert_type: str = "INTRUSION", person_count: int = 1):

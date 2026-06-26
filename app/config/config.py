@@ -16,8 +16,9 @@ KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "YjmJ5WOX84MHgVJ2IH
 
 SNAPSHOT_DIR = os.getenv("SNAPSHOT_DIR", "snapshots")
 
-# Alert cooldown per (zone, track_id) in seconds
-ALERT_COOLDOWN_SECS = float(os.getenv("ALERT_COOLDOWN_SECS", "1"))
+# Intrusion alert timing
+INTRUSION_PERSIST_SECS  = float(os.getenv("INTRUSION_PERSIST_SECONDS", "0"))
+INTRUSION_COOLDOWN_SECS = float(os.getenv("INTRUSION_COOLDOWN_SECONDS", "10"))
 
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")

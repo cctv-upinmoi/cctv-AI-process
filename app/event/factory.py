@@ -6,6 +6,10 @@ def make_intrusion_producer() -> IntrusionProducerBase:
     return KafkaIntrusionProducer()
 
 
-def make_camera_subscriber(camera_manager) -> CameraSubscriberBase:
+def make_camera_subscriber(camera_manager,
+                           group_id: str = "cctv-ai",
+                           camera_id_filter: str | None = None) -> CameraSubscriberBase:
     from event.kafka_modify_zone_consumer import KafkaModifyZoneConsumer
-    return KafkaModifyZoneConsumer(camera_manager)
+    return KafkaModifyZoneConsumer(camera_manager,
+                                   group_id=group_id,
+                                   camera_id_filter=camera_id_filter)
