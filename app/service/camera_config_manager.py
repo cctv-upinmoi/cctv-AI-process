@@ -1,12 +1,11 @@
 import threading
-import redis
 from typing import Dict, Optional
-from app.model.camera import Camera
+from model.camera import Camera
 from model.zone import Zone
 
 
 class CameraConfigManager:
-    def __init__(self, redis_client: redis.Redis):
+    def __init__(self):
         self._cameras: Dict[str, Camera] = {}
         self._lock = threading.RLock()
 
@@ -19,7 +18,6 @@ class CameraConfigManager:
         return camera.zones if camera else []
 
     def update_camera_zones(self, camera_id: str, zones_data: list):
-        """Chỉ update zones, giữ nguyên toàn bộ thông tin camera."""
         with self._lock:
             camera = self._cameras.get(str(camera_id))
             if camera is None:

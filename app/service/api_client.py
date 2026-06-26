@@ -1,14 +1,14 @@
 import requests
 
-from app.auth.keycloak import KeycloakTokenClient
-from app.config.config import (
+from auth.keycloak import KeycloakTokenClient
+from config.config import (
     BACKEND_API_URL,
     KEYCLOAK_URL,
     KEYCLOAK_REALM,
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_CLIENT_SECRET,
 )
-from app.model.camera import Camera
+from model.camera import Camera
 
 _token_client = KeycloakTokenClient(
     KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID, KEYCLOAK_CLIENT_SECRET

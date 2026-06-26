@@ -3,7 +3,7 @@ import time
 
 import cv2
 
-from app.config.config import GO2RTC_RTSP_URL
+from config.config import GO2RTC_RTSP_URL
 
 
 class CameraStream(threading.Thread):
